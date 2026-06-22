@@ -1,0 +1,486 @@
+You are a senior engineer modernizing a FastAPI (Python) backend and React + Vite + Tailwind + shadcn/ui frontend. Follow every instruction below exactly and in order. Do not skip phases. Do not modify source files before the audit documents are complete.
+
+═══════════════════════════════════════════
+STEP 1 — AUDIT FIRST
+═══════════════════════════════════════════
+
+Read every file in this repository. Identify:
+
+- Python version, FastAPI version, Pydantic version (v1 or v2)
+- SQLAlchemy version and whether it uses sync or async sessions
+- How background tasks currently work — Celery, RQ, Redis, raw asyncio, BackgroundTasks, or other
+- All pip packages with exact versions (check requirements.txt, pyproject.toml, setup.py)
+- All npm packages with exact versions
+- How environment variables are loaded (dotenv, os.environ, pydantic-settings)
+- TypeScript strictness level in tsconfig.json
+- Current shadcn/ui style setting in components.json
+- Any Tailwind config version (v3 tailwind.config.js or v4 CSS-first)
+- Existing test framework and coverage level
+
+Produce these four files before touching any source code:
+
+1. AUDIT.md — full inventory of current stack with version numbers
+2. LEGACY.md — every deprecated pattern with file:line references
+3. DEPENDENCY_RISK.md — unmaintained or CVE-flagged packages
+4. MIGRATION_PLAN.md — phased plan with effort and risk per item
+
+Stop and wait for confirmation before proceeding.
+
+═══════════════════════════════════════════
+STEP 2 — GLOBAL RULES (apply to every change)
+═══════════════════════════════════════════
+
+1. No print() anywhere. All logging via Loguru with structured JSON in production.
+2. All FastAPI routes must be async def. No synchronous route handlers.
+3. All FastAPI routes must have response_model set. No untyped responses.
+4. Pydantic v2 only. No @validator (use @field_validator). No .dict() (use .model_dump()). No orm_mode (use model_config = ConfigDict(from_attributes=True)).
+5. TypeScript strict mode. No explicit any. No type assertions with as unless unavoidable and commented.
+6. Zero hardcoded color values in frontend components. All colors via Tailwind utility classes that reference CSS variables.
+7. All shadcn/ui components must use new-york style, zinc base color, CSS variables enabled. No mixing of old default style components.
+8. Every background job uses APScheduler. No Redis. No Celery. No RQ. Remove all such dependencies entirely.
+9. Light and dark mode must work on every screen. Use next-themes. Test both modes.
+10. No secrets or credentials in source files. All config via pydantic-settings BaseSettings.
+
+═══════════════════════════════════════════
+STEP 3 — BACKEND: FASTAPI MODERNIZATION
+═══════════════════════════════════════════
+
+PACKAGE MANAGER
+
+- Switch to uv for dependency management (pip install uv, then uv sync)
+- Use pyproject.toml as the single source of truth for dependencies
+- Minimum Python version: 3.12
+
+REQUIRED PACKAGES
+fastapi[standard]>=0.115, pydantic>=2.9, pydantic-settings>=2.6,
+sqlalchemy[asyncio]>=2.0, asyncpg>=0.30, alembic>=1.14,
+apscheduler>=3.10, loguru>=0.7, python-jose[cryptography]>=3.3,
+passlib[bcrypt]>=1.7, httpx>=0.27, uvicorn[standard]>=0.32
+
+DEV PACKAGES
+pytest>=8.3, pytest-asyncio>=0.24, pytest-cov>=6.0, httpx>=0.27,
+ruff>=0.8, mypy>=1.13
+
+PROJECT STRUCTURE (enforce this layout):
+app/
+├── main.py # lifespan context manager, app factory, middleware registration
+├── core/
+│ ├── config.py # pydantic-settings BaseSettings, get_settings() with @lru_cache
+│ ├── database.py # AsyncEngine, async_sessionmaker, Base, get_db dependency
+│ ├── scheduler.py # APScheduler AsyncIOScheduler, SQLAlchemyJobStore, register_jobs()
+│ ├── security.py # JWT creation/verification, password hashing with passlib
+│ └── logging.py # Loguru configuration, RequestIDMiddleware
+├── api/
+│ └── v1/
+│ ├── **init**.py
+│ ├── router.py # includes all sub-routers
+│ └── [domain].py # one file per domain (users.py, auth.py, etc.)
+├── models/ # SQLAlchemy ORM models using Mapped[] and mapped_column()
+├── schemas/ # Pydantic v2 request/response schemas
+├── services/ # business logic, one file per domain
+├── jobs/ # APScheduler job functions, one file per domain
+└── tests/ # mirrors app/ structure
+
+CONFIG (app/core/config.py):
+
+- Use pydantic-settings BaseSettings with model_config = SettingsConfigDict(env_file=".env", extra="forbid")
+- Every env var must be typed
+- App must raise a descriptive error at startup if any required var is missing
+- Export get_settings() decorated with @lru_cache
+
+DATABASE (app/core/database.py):
+
+- Use create_async_engine with pool_pre_ping=True
+- Use async_sessionmaker with expire_on_commit=False
+- All models inherit from Base (DeclarativeBase)
+- All model columns use Mapped[type] = mapped_column() syntax (SQLAlchemy 2.0 style)
+- All queries use select(), not session.query()
+- get_db() is an async generator dependency yielding AsyncSession
+- Never call Base.metadata.create_all() in the app — only in Alembic migrations
+
+PYDANTIC v2 MIGRATION:
+
+- Replace every @validator with @field_validator
+- Replace every @root_validator with @model_validator
+- Replace every .dict() call with .model_dump()
+- Replace every class Config: orm_mode = True with model_config = ConfigDict(from_attributes=True)
+- Replace every Optional[X] with X | None
+- Add explicit type annotations to every field
+
+LOGGING (app/core/logging.py):
+
+- Remove all print() and standard library logging calls
+- Configure Loguru: JSON format in production, colored human-readable in development
+- Controlled by ENVIRONMENT setting from config
+- Add RequestIDMiddleware using starlette BaseHTTPMiddleware:
+  - Generate UUID per request, add to response header X-Request-ID
+  - Use logger.contextualize(request_id=...) so every log line in the request includes it
+- Replace all existing log statements throughout the codebase
+
+MAIN APP (app/main.py):
+
+- Use @asynccontextmanager lifespan — not the deprecated @app.on_event
+- Lifespan startup: call register_jobs(), start scheduler, run any DB startup checks
+- Lifespan shutdown: scheduler.shutdown(wait=False)
+- Register: CORSMiddleware (origins from settings), GZipMiddleware, RequestIDMiddleware
+- Add GET /health returning {"status": "ok", "version": "..."}
+- Add GET /ready returning {"status": "ok"} only if DB is reachable (attempt a simple query)
+
+ALEMBIC:
+
+- If not already set up: alembic init alembic
+- Configure alembic/env.py to use the async engine
+- All schema changes go through migrations — never alter tables manually
+
+LINTING (pyproject.toml):
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+select = ["E","F","I","N","UP","ANN","S","B","A","C4","DTZ","T20","RUF"]
+ignore = ["ANN101","ANN102"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80"
+
+═══════════════════════════════════════════
+STEP 4 — APSCHEDULER: REPLACE REDIS/CELERY
+═══════════════════════════════════════════
+
+Create app/core/scheduler.py:
+
+- Instantiate AsyncIOScheduler
+- Use SQLAlchemyJobStore with the app's Postgres DATABASE_URL (replace +asyncpg with empty string for the sync SQLAlchemy URL that APScheduler needs)
+- Use AsyncIOExecutor as the default executor
+- Set job_defaults: coalesce=True, misfire_grace_time=60, max_instances=1
+- Set timezone="UTC"
+- Export a single scheduler instance
+- Export register_jobs() that adds all recurring jobs with replace_existing=True
+
+Create app/jobs/ directory. One file per domain. Each job function must:
+
+- Be an async def
+- Get its own database session using: async with AsyncSessionLocal() as session
+  (NOT FastAPI dependency injection — schedulers don't use DI)
+- Log start, completion, and errors via Loguru with structured fields
+- Be idempotent — safe to call multiple times with no side effects
+
+Remove from the entire codebase:
+
+- All Redis imports and usage
+- All Celery imports, app instantiation, and task decorators
+- All RQ imports
+- requirements for redis, celery, rq packages
+- Any celery.py, celeryconfig.py, or worker.py files
+- Any Redis connection code
+
+Add an admin jobs API router at /api/v1/admin/jobs (require admin auth):
+
+- GET /jobs — list all scheduled jobs with id, name, next_run_time, trigger description
+- POST /jobs/{job_id}/trigger — run a job immediately out of schedule
+- PUT /jobs/{job_id}/pause — pause a job
+- PUT /jobs/{job_id}/resume — resume a paused job
+- Response schema: JobStatus with typed fields
+
+═══════════════════════════════════════════
+STEP 5 — FRONTEND: VITE + REACT UPGRADE
+═══════════════════════════════════════════
+
+PACKAGE VERSIONS (package.json):
+react: ^19.0.0, react-dom: ^19.0.0,
+@tanstack/react-query: ^5.62.0,
+@tanstack/react-router: ^1.90.0,
+@tanstack/router-vite-plugin: ^1.90.0,
+zustand: ^5.0.0,
+next-themes: ^0.4.4,
+cmdk: ^1.0.4,
+sonner: ^1.7.0,
+vaul: ^1.1.0,
+lucide-react: ^0.468.0,
+clsx: ^2.1.1,
+tailwind-merge: ^2.5.5,
+date-fns: ^4.1.0,
+zod: ^3.23.0
+
+DEV:
+vite: ^6.0.5, @vitejs/plugin-react: ^4.3.4,
+typescript: ^5.7.2, @tailwindcss/vite: ^4.0.0, tailwindcss: ^4.0.0,
+vitest: ^2.1.8, @playwright/test: ^1.49.0,
+eslint: ^9.17.0, @typescript-eslint/eslint-plugin: ^8.18.0
+
+TAILWIND v4 MIGRATION:
+
+- Delete tailwind.config.js
+- Update vite.config.ts: import tailwindcss from "@tailwindcss/vite", add to plugins array, remove postcss config
+- Update index.css: replace @tailwind directives with @import "tailwindcss"
+- Add @import "./theme/nova.css" and @import "./theme/dark.css" after the tailwind import
+- Move all custom theme tokens to nova.css using @theme directive
+
+TYPESCRIPT:
+tsconfig.json must have:
+{ "strict": true, "noUncheckedIndexedAccess": true, "exactOptionalPropertyTypes": true,
+"noImplicitAny": true, "noImplicitReturns": true }
+
+PROJECT STRUCTURE (enforce):
+src/
+├── app/ # TanStack Router route files
+│ ├── \_\_root.tsx # root layout
+│ ├── index.tsx # / redirect
+│ ├── login.tsx
+│ ├── dashboard/
+│ │ └── index.tsx
+│ └── admin/
+│ └── scheduler.tsx
+├── components/
+│ ├── ui/ # shadcn/ui components (nova, new-york style)
+│ ├── layout/
+│ │ ├── AppShell.tsx
+│ │ ├── Sidebar.tsx
+│ │ └── TopBar.tsx
+│ └── shared/
+│ ├── ThemeToggle.tsx
+│ ├── CommandPalette.tsx
+│ ├── MetricCard.tsx
+│ └── DataTable.tsx
+├── lib/
+│ ├── api.ts # typed fetch wrapper + one function per endpoint
+│ ├── query.ts # TanStack Query client config
+│ └── utils.ts # cn() using clsx + tailwind-merge
+├── store/
+│ └── auth.ts # Zustand auth store (user, token, setToken, clear)
+├── hooks/ # custom hooks
+└── types/ # shared TypeScript interfaces
+
+API LAYER (src/lib/api.ts):
+
+- Typed fetch wrapper that reads VITE_API_URL from import.meta.env
+- Attaches Authorization: Bearer {token} from Zustand auth store on every request
+- On 401: refresh token and retry once, then redirect to /login
+- Throws typed ApiError on any non-2xx response: { status, message, detail }
+- One typed async function per backend endpoint
+- All response shapes validated with Zod schemas mirroring FastAPI response_models
+
+TANSTACK ROUTER:
+
+- Use file-based routing with @tanstack/router-vite-plugin
+- All route params and search params must be typed
+- Add route-level loaders that prefetch data via TanStack Query
+- Protected routes check auth store and redirect to /login if unauthenticated
+
+APP SHELL (src/components/layout/):
+AppShell.tsx:
+
+- Root layout: sidebar + topbar + main content
+- Main content: flex-1, overflow-y-auto, p-6, bg-background
+
+Sidebar.tsx:
+
+- Width: 240px expanded, 64px icon-only (toggle stored in Zustand)
+- Background: bg-sidebar (uses --sidebar CSS variable)
+- Border right: border-sidebar-border
+- Nav items: icon (16px lucide) + label text, active state with bg-sidebar-accent
+- Bottom section: ThemeToggle + user avatar + sign out button
+- On mobile (below md breakpoint): renders as a Sheet drawer using shadcn Sheet
+
+TopBar.tsx:
+
+- Height: 56px, sticky, border-bottom, bg-background
+- Left: Breadcrumb component showing current route path
+- Right: notification bell icon + user avatar with DropdownMenu
+
+COMPONENT REQUIREMENTS:
+MetricCard.tsx:
+
+- Props: label (string), value (string | number), delta (number, optional), icon (LucideIcon, optional)
+- Positive delta: text-green-500, TrendingUp icon
+- Negative delta: text-red-500, TrendingDown icon
+- Uses Card from shadcn/ui
+
+DataTable.tsx:
+
+- Generic component using TanStack Table v8
+- Props: data, columns, isLoading (shows Skeleton), pagination config
+- Includes column header sorting, search input, rows-per-page select
+- Virtualized scrolling for large datasets using @tanstack/react-virtual
+
+CommandPalette.tsx:
+
+- Triggered by Cmd+K (global keydown listener in useEffect)
+- Uses cmdk Command component inside shadcn Dialog
+- Registers: all routes (navigate on select), all admin actions (trigger job, etc.)
+- Fuzzy search across all registered commands
+- Keyboard navigation: arrow keys, Enter to execute, Escape to close
+
+═══════════════════════════════════════════
+STEP 6 — SHADCN/UI: FULL WIPE AND NOVA REINSTALL
+═══════════════════════════════════════════
+
+WIPE:
+
+1. Delete src/components/ui/ entirely
+2. Delete components.json
+
+REINSTALL:
+Run: npx shadcn@latest init
+Select during init:
+
+- Style: New York
+- Base color: Zinc
+- CSS variables: Yes
+- Tailwind version: v4
+
+Verify components.json contains:
+{ "style": "new-york", "tailwind": { "baseColor": "zinc", "cssVariables": true } }
+
+INSTALL ALL COMPONENTS:
+npx shadcn@latest add button card input label select textarea badge dialog sheet drawer dropdown-menu context-menu table form avatar skeleton tooltip popover separator scroll-area progress tabs alert alert-dialog command sidebar chart navigation-menu breadcrumb
+
+NOVA CSS VARIABLES (src/theme/nova.css):
+Add under @layer base { :root { ... } }:
+--background: 0 0% 100%;
+--foreground: 240 10% 3.9%;
+--card: 0 0% 100%;
+--card-foreground: 240 10% 3.9%;
+--popover: 0 0% 100%;
+--popover-foreground: 240 10% 3.9%;
+--primary: 240 5.9% 10%;
+--primary-foreground: 0 0% 98%;
+--secondary: 240 4.8% 95.9%;
+--secondary-foreground: 240 5.9% 10%;
+--muted: 240 4.8% 95.9%;
+--muted-foreground: 240 3.8% 46.1%;
+--accent: 240 4.8% 95.9%;
+--accent-foreground: 240 5.9% 10%;
+--destructive: 0 84.2% 60.2%;
+--destructive-foreground: 0 0% 98%;
+--border: 240 5.9% 90%;
+--input: 240 5.9% 90%;
+--ring: 240 5.9% 10%;
+--radius: 0.5rem;
+--sidebar: 240 5.9% 97%;
+--sidebar-border: 240 5.9% 90%;
+--sidebar-accent: 240 4.8% 93%;
+--sidebar-accent-foreground: 240 5.9% 10%;
+
+NOVA CONSISTENCY ENFORCEMENT:
+After reinstalling, audit every file in src/:
+
+- Zero hardcoded hex, rgb, or hsl color values in any component
+- Zero inline style={{ color: '...' }} that references a color not in the theme
+- Every color must be expressed as a Tailwind utility class referencing the CSS variables above
+- Do not edit files inside src/components/ui/ directly — extend at usage site using cn()
+
+═══════════════════════════════════════════
+STEP 7 — LIGHT / DARK THEME
+═══════════════════════════════════════════
+
+Install: npm install next-themes
+
+MAIN ENTRY (src/main.tsx):
+Wrap the root in ThemeProvider from next-themes, outside RouterProvider:
+<ThemeProvider attribute="class" defaultTheme="system" storageKey="app-theme" disableTransitionOnChange>
+
+DARK CSS VARIABLES (src/theme/dark.css):
+Add under .dark { ... }:
+--background: 240 10% 3.9%;
+--foreground: 0 0% 98%;
+--card: 240 10% 3.9%;
+--card-foreground: 0 0% 98%;
+--popover: 240 10% 3.9%;
+--popover-foreground: 0 0% 98%;
+--primary: 0 0% 98%;
+--primary-foreground: 240 5.9% 10%;
+--secondary: 240 3.7% 15.9%;
+--secondary-foreground: 0 0% 98%;
+--muted: 240 3.7% 15.9%;
+--muted-foreground: 240 5% 64.9%;
+--accent: 240 3.7% 15.9%;
+--accent-foreground: 0 0% 98%;
+--destructive: 0 62.8% 30.6%;
+--destructive-foreground: 0 0% 98%;
+--border: 240 3.7% 15.9%;
+--input: 240 3.7% 15.9%;
+--ring: 240 4.9% 83.9%;
+--sidebar: 240 10% 5%;
+--sidebar-border: 240 3.7% 12%;
+--sidebar-accent: 240 3.7% 10%;
+--sidebar-accent-foreground: 0 0% 98%;
+
+FLASH PREVENTION (index.html — in <head> before any <link>):
+
+<script>
+(function(){
+  const t=localStorage.getItem('app-theme');
+  const d=window.matchMedia('(prefers-color-scheme:dark)').matches;
+  if(t==='dark'||((!t||t==='system')&&d))document.documentElement.classList.add('dark');
+})();
+</script>
+
+THEME TOGGLE COMPONENT (src/components/shared/ThemeToggle.tsx):
+
+- Uses useTheme() from next-themes
+- Cycles: light → dark → system → light
+- Icons: Sun (light), Moon (dark), Monitor (system) from lucide-react
+- Rendered as Button variant="ghost" size="icon"
+- Place in Sidebar bottom AND in user dropdown menu in TopBar
+
+═══════════════════════════════════════════
+STEP 8 — CI/CD AND QUALITY GATES
+═══════════════════════════════════════════
+
+GITHUB ACTIONS (.github/workflows/ci.yml):
+backend job:
+
+- uses: astral-sh/setup-uv@v4
+- run: uv sync --frozen
+- run: uv run ruff check .
+- run: uv run ruff format --check .
+- run: uv run mypy app
+- run: uv run pytest --cov (fail if below 80%)
+
+frontend job:
+
+- run: npm ci
+- run: npx tsc --noEmit
+- run: npx eslint . (zero warnings allowed)
+- run: npx vitest run --coverage (fail if below 80%)
+- run: npm run build
+- run: npx playwright test (includes visual regression in light AND dark mode)
+
+PLAYWRIGHT VISUAL REGRESSION:
+
+- Screenshot every page in light mode and dark mode
+- Store as baseline images
+- Fail CI if visual diff exceeds 0.1% on any page
+
+═══════════════════════════════════════════
+DEFINITION OF DONE
+═══════════════════════════════════════════
+
+Do not consider the migration complete until ALL of these are true:
+
+[ ] mypy --strict exits 0 on the entire app/ directory
+[ ] ruff check exits 0 with zero warnings
+[ ] tsc --noEmit exits 0 with strict: true
+[ ] ESLint exits 0 with zero warnings
+[ ] Backend test coverage >= 80%, all async tests use asyncio_mode = auto
+[ ] Frontend test coverage >= 80%
+[ ] All Playwright E2E tests pass
+[ ] Visual regression screenshots pass in BOTH light and dark mode
+[ ] Zero Pydantic v1 patterns: no @validator, no .dict(), no orm_mode
+[ ] Zero Redis/Celery/RQ imports anywhere in the codebase
+[ ] APScheduler starts cleanly in lifespan, shuts down without errors
+[ ] All jobs are in app/jobs/, all are async def, all use AsyncSessionLocal directly
+[ ] components.json shows style: new-york, baseColor: zinc
+[ ] Zero hardcoded color values in any frontend file
+[ ] ThemeToggle cycles correctly, preference persists on reload, no flash on dark mode
+[ ] All FastAPI routes are async def with response_model
+[ ] No print() anywhere — all logging via Loguru with request_id in context
+[ ] /health and /ready endpoints return 200 in production
+[ ] All env vars validated at startup by pydantic-settings — app crashes with clear message if any are missing
+
+Begin with Step 1. Produce the four audit documents first. Wait for confirmation before writing any application code.
