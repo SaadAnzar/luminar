@@ -1,39 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { useEffect, useState } from "react"
 import type { Scene } from "@/lib/schemas"
+import { makeInlineSvg } from "@/lib/svg"
 
 interface Props {
   scene: Scene | null
   sceneIndex: number
-}
-
-/**
- * Inline the scene SVG into the DOM.
- *
- * We deliberately do NOT use <object>/<img src>: Supabase Storage serves objects
- * with `Content-Disposition: attachment` and a locked-down `CSP: default-src
- * 'none'; sandbox`, so an embedded/fetched-as-document SVG renders blank and its
- * CSS @keyframes are blocked. Fetching the markup (CORS is open) and inlining it
- * puts the SVG in the host document, where it renders, scales via viewBox, and
- * animates under the app's CSP. This also fixes every already-generated luminar
- * without re-rendering anything.
- */
-function makeInlineSvg(raw: string): string {
-  let s = raw
-    // strip script vectors — our SVGs are CSS-only, but inlining is dangerouslySetInnerHTML
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "")
-  // drop the fixed width/height on the root <svg> so the viewBox drives scaling
-  s = s
-    .replace(/(<svg\b[^>]*?)\swidth="[^"]*"/i, "$1")
-    .replace(/(<svg\b[^>]*?)\sheight="[^"]*"/i, "$1")
-  // ensure it fills its box
-  s = s.replace(
-    /<svg\b/i,
-    '<svg preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block"',
-  )
-  return s
 }
 
 export function SceneRenderer({ scene, sceneIndex }: Props) {
