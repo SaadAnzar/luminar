@@ -7,6 +7,7 @@ import {
   UserIcon,
   Logout03Icon,
   Compass01Icon,
+  TaskDone01Icon,
 } from "@hugeicons/core-free-icons"
 import { cn, initials } from "@/lib/utils"
 import { Logo } from "./Logo"
@@ -19,6 +20,7 @@ const staticNav = [
   { to: "/home", label: "My Luminars", icon: PlayListIcon },
   { to: "/discover", label: "Discover", icon: Compass01Icon },
   { to: "/create", label: "Create", icon: MagicWand01Icon },
+  { to: "/assessments", label: "Assessments", icon: TaskDone01Icon },
 ] as const
 
 export function AppSidebar() {

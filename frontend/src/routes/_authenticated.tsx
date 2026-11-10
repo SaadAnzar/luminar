@@ -9,13 +9,15 @@ import { AppShell } from "@/components/layout/AppShell"
 import { CommandPaletteProvider } from "@/components/layout/CommandPalette"
 import { PageTransition } from "@/components/motion/PageTransition"
 import { isTokenExpired } from "@/lib/api"
+import { rememberReturnTo } from "@/lib/returnTo"
 
 export const Route = createFileRoute("/_authenticated")({
-  beforeLoad: () => {
+  beforeLoad: ({ location }) => {
     const token = localStorage.getItem("luminar_token")
     if (!token || isTokenExpired(token)) {
       localStorage.removeItem("luminar_token")
       localStorage.removeItem("luminar_user")
+      rememberReturnTo(location.href)
       throw redirect({ to: "/signin" })
     }
     // Send users who explicitly haven't onboarded to onboarding first.

@@ -20,10 +20,15 @@ import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authentica
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedDiscoverRouteImport } from './routes/_authenticated/discover'
 import { Route as AuthenticatedCreateRouteImport } from './routes/_authenticated/create'
+import { Route as AuthenticatedAssessmentsIndexRouteImport } from './routes/_authenticated/assessments.index'
 import { Route as AuthenticatedWatchLuminarIdRouteImport } from './routes/_authenticated/watch.$luminarId'
+import { Route as AuthenticatedTakeAssessmentIdRouteImport } from './routes/_authenticated/take.$assessmentId'
 import { Route as AuthenticatedScriptReviewLuminarIdRouteImport } from './routes/_authenticated/script-review.$luminarId'
 import { Route as AuthenticatedProfileUserIdRouteImport } from './routes/_authenticated/profile.$userId'
 import { Route as AuthenticatedGeneratingJobIdRouteImport } from './routes/_authenticated/generating.$jobId'
+import { Route as AuthenticatedAssessmentsNewRouteImport } from './routes/_authenticated/assessments.new'
+import { Route as AuthenticatedAssessmentsAssessmentIdResponsesRouteImport } from './routes/_authenticated/assessments.$assessmentId.responses'
+import { Route as AuthenticatedAssessmentsAssessmentIdEditRouteImport } from './routes/_authenticated/assessments.$assessmentId.edit'
 
 const SigninRoute = SigninRouteImport.update({
   id: '/signin',
@@ -79,10 +84,22 @@ const AuthenticatedCreateRoute = AuthenticatedCreateRouteImport.update({
   path: '/create',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAssessmentsIndexRoute =
+  AuthenticatedAssessmentsIndexRouteImport.update({
+    id: '/assessments/',
+    path: '/assessments/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedWatchLuminarIdRoute =
   AuthenticatedWatchLuminarIdRouteImport.update({
     id: '/watch/$luminarId',
     path: '/watch/$luminarId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedTakeAssessmentIdRoute =
+  AuthenticatedTakeAssessmentIdRouteImport.update({
+    id: '/take/$assessmentId',
+    path: '/take/$assessmentId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedScriptReviewLuminarIdRoute =
@@ -103,6 +120,24 @@ const AuthenticatedGeneratingJobIdRoute =
     path: '/generating/$jobId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAssessmentsNewRoute =
+  AuthenticatedAssessmentsNewRouteImport.update({
+    id: '/assessments/new',
+    path: '/assessments/new',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedAssessmentsAssessmentIdResponsesRoute =
+  AuthenticatedAssessmentsAssessmentIdResponsesRouteImport.update({
+    id: '/assessments/$assessmentId/responses',
+    path: '/assessments/$assessmentId/responses',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedAssessmentsAssessmentIdEditRoute =
+  AuthenticatedAssessmentsAssessmentIdEditRouteImport.update({
+    id: '/assessments/$assessmentId/edit',
+    path: '/assessments/$assessmentId/edit',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -115,10 +150,15 @@ export interface FileRoutesByFullPath {
   '/library': typeof AuthenticatedLibraryRoute
   '/social': typeof AuthenticatedSocialRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/assessments/new': typeof AuthenticatedAssessmentsNewRoute
   '/generating/$jobId': typeof AuthenticatedGeneratingJobIdRoute
   '/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/script-review/$luminarId': typeof AuthenticatedScriptReviewLuminarIdRoute
+  '/take/$assessmentId': typeof AuthenticatedTakeAssessmentIdRoute
   '/watch/$luminarId': typeof AuthenticatedWatchLuminarIdRoute
+  '/assessments/': typeof AuthenticatedAssessmentsIndexRoute
+  '/assessments/$assessmentId/edit': typeof AuthenticatedAssessmentsAssessmentIdEditRoute
+  '/assessments/$assessmentId/responses': typeof AuthenticatedAssessmentsAssessmentIdResponsesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -131,10 +171,15 @@ export interface FileRoutesByTo {
   '/library': typeof AuthenticatedLibraryRoute
   '/social': typeof AuthenticatedSocialRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/assessments/new': typeof AuthenticatedAssessmentsNewRoute
   '/generating/$jobId': typeof AuthenticatedGeneratingJobIdRoute
   '/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/script-review/$luminarId': typeof AuthenticatedScriptReviewLuminarIdRoute
+  '/take/$assessmentId': typeof AuthenticatedTakeAssessmentIdRoute
   '/watch/$luminarId': typeof AuthenticatedWatchLuminarIdRoute
+  '/assessments': typeof AuthenticatedAssessmentsIndexRoute
+  '/assessments/$assessmentId/edit': typeof AuthenticatedAssessmentsAssessmentIdEditRoute
+  '/assessments/$assessmentId/responses': typeof AuthenticatedAssessmentsAssessmentIdResponsesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -149,10 +194,15 @@ export interface FileRoutesById {
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
   '/_authenticated/social': typeof AuthenticatedSocialRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/_authenticated/assessments/new': typeof AuthenticatedAssessmentsNewRoute
   '/_authenticated/generating/$jobId': typeof AuthenticatedGeneratingJobIdRoute
   '/_authenticated/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/_authenticated/script-review/$luminarId': typeof AuthenticatedScriptReviewLuminarIdRoute
+  '/_authenticated/take/$assessmentId': typeof AuthenticatedTakeAssessmentIdRoute
   '/_authenticated/watch/$luminarId': typeof AuthenticatedWatchLuminarIdRoute
+  '/_authenticated/assessments/': typeof AuthenticatedAssessmentsIndexRoute
+  '/_authenticated/assessments/$assessmentId/edit': typeof AuthenticatedAssessmentsAssessmentIdEditRoute
+  '/_authenticated/assessments/$assessmentId/responses': typeof AuthenticatedAssessmentsAssessmentIdResponsesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -167,10 +217,15 @@ export interface FileRouteTypes {
     | '/library'
     | '/social'
     | '/auth/callback'
+    | '/assessments/new'
     | '/generating/$jobId'
     | '/profile/$userId'
     | '/script-review/$luminarId'
+    | '/take/$assessmentId'
     | '/watch/$luminarId'
+    | '/assessments/'
+    | '/assessments/$assessmentId/edit'
+    | '/assessments/$assessmentId/responses'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -183,10 +238,15 @@ export interface FileRouteTypes {
     | '/library'
     | '/social'
     | '/auth/callback'
+    | '/assessments/new'
     | '/generating/$jobId'
     | '/profile/$userId'
     | '/script-review/$luminarId'
+    | '/take/$assessmentId'
     | '/watch/$luminarId'
+    | '/assessments'
+    | '/assessments/$assessmentId/edit'
+    | '/assessments/$assessmentId/responses'
   id:
     | '__root__'
     | '/'
@@ -200,10 +260,15 @@ export interface FileRouteTypes {
     | '/_authenticated/library'
     | '/_authenticated/social'
     | '/auth/callback'
+    | '/_authenticated/assessments/new'
     | '/_authenticated/generating/$jobId'
     | '/_authenticated/profile/$userId'
     | '/_authenticated/script-review/$luminarId'
+    | '/_authenticated/take/$assessmentId'
     | '/_authenticated/watch/$luminarId'
+    | '/_authenticated/assessments/'
+    | '/_authenticated/assessments/$assessmentId/edit'
+    | '/_authenticated/assessments/$assessmentId/responses'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -293,11 +358,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCreateRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/assessments/': {
+      id: '/_authenticated/assessments/'
+      path: '/assessments'
+      fullPath: '/assessments/'
+      preLoaderRoute: typeof AuthenticatedAssessmentsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/watch/$luminarId': {
       id: '/_authenticated/watch/$luminarId'
       path: '/watch/$luminarId'
       fullPath: '/watch/$luminarId'
       preLoaderRoute: typeof AuthenticatedWatchLuminarIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/take/$assessmentId': {
+      id: '/_authenticated/take/$assessmentId'
+      path: '/take/$assessmentId'
+      fullPath: '/take/$assessmentId'
+      preLoaderRoute: typeof AuthenticatedTakeAssessmentIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/script-review/$luminarId': {
@@ -321,6 +400,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGeneratingJobIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/assessments/new': {
+      id: '/_authenticated/assessments/new'
+      path: '/assessments/new'
+      fullPath: '/assessments/new'
+      preLoaderRoute: typeof AuthenticatedAssessmentsNewRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/assessments/$assessmentId/responses': {
+      id: '/_authenticated/assessments/$assessmentId/responses'
+      path: '/assessments/$assessmentId/responses'
+      fullPath: '/assessments/$assessmentId/responses'
+      preLoaderRoute: typeof AuthenticatedAssessmentsAssessmentIdResponsesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/assessments/$assessmentId/edit': {
+      id: '/_authenticated/assessments/$assessmentId/edit'
+      path: '/assessments/$assessmentId/edit'
+      fullPath: '/assessments/$assessmentId/edit'
+      preLoaderRoute: typeof AuthenticatedAssessmentsAssessmentIdEditRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -331,10 +431,15 @@ interface AuthenticatedRouteChildren {
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
   AuthenticatedSocialRoute: typeof AuthenticatedSocialRoute
+  AuthenticatedAssessmentsNewRoute: typeof AuthenticatedAssessmentsNewRoute
   AuthenticatedGeneratingJobIdRoute: typeof AuthenticatedGeneratingJobIdRoute
   AuthenticatedProfileUserIdRoute: typeof AuthenticatedProfileUserIdRoute
   AuthenticatedScriptReviewLuminarIdRoute: typeof AuthenticatedScriptReviewLuminarIdRoute
+  AuthenticatedTakeAssessmentIdRoute: typeof AuthenticatedTakeAssessmentIdRoute
   AuthenticatedWatchLuminarIdRoute: typeof AuthenticatedWatchLuminarIdRoute
+  AuthenticatedAssessmentsIndexRoute: typeof AuthenticatedAssessmentsIndexRoute
+  AuthenticatedAssessmentsAssessmentIdEditRoute: typeof AuthenticatedAssessmentsAssessmentIdEditRoute
+  AuthenticatedAssessmentsAssessmentIdResponsesRoute: typeof AuthenticatedAssessmentsAssessmentIdResponsesRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -344,11 +449,18 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
   AuthenticatedSocialRoute: AuthenticatedSocialRoute,
+  AuthenticatedAssessmentsNewRoute: AuthenticatedAssessmentsNewRoute,
   AuthenticatedGeneratingJobIdRoute: AuthenticatedGeneratingJobIdRoute,
   AuthenticatedProfileUserIdRoute: AuthenticatedProfileUserIdRoute,
   AuthenticatedScriptReviewLuminarIdRoute:
     AuthenticatedScriptReviewLuminarIdRoute,
+  AuthenticatedTakeAssessmentIdRoute: AuthenticatedTakeAssessmentIdRoute,
   AuthenticatedWatchLuminarIdRoute: AuthenticatedWatchLuminarIdRoute,
+  AuthenticatedAssessmentsIndexRoute: AuthenticatedAssessmentsIndexRoute,
+  AuthenticatedAssessmentsAssessmentIdEditRoute:
+    AuthenticatedAssessmentsAssessmentIdEditRoute,
+  AuthenticatedAssessmentsAssessmentIdResponsesRoute:
+    AuthenticatedAssessmentsAssessmentIdResponsesRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

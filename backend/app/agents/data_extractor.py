@@ -175,9 +175,40 @@ _YOUTUBE_ID_RE = re.compile(
 )
 
 
-def _youtube_video_id(url: str) -> str | None:
+def youtube_video_id(url: str) -> str | None:
     match = _YOUTUBE_ID_RE.search(url)
     return match.group(1) if match else None
+
+
+# Kept for existing callers.
+_youtube_video_id = youtube_video_id
+
+
+def fetch_youtube_segments(url: str) -> list[dict]:
+    """Fetch a YouTube caption track as timed segments: [{text, start, duration}]
+    (seconds). Raises ExtractionError on a bad URL or when no captions exist.
+
+    youtube-transcript-api >= 1.0 replaced the `get_transcript` classmethod with
+    an instance `.fetch()`; both shapes are supported so an older pin still works.
+    """
+    video_id = youtube_video_id(url)
+    if not video_id:
+        raise ExtractionError(f"Could not parse a YouTube video id from: {url}")
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        if hasattr(YouTubeTranscriptApi, "get_transcript"):
+            segments = YouTubeTranscriptApi.get_transcript(video_id)
+        else:
+            segments = YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+    except Exception as exc:
+        logger.warning(f"YouTube transcript fetch failed for {url}: {exc}")
+        raise ExtractionError(
+            "Could not fetch a transcript for this video — it may have no captions."
+        ) from exc
+    segments = [s for s in segments if (s.get("text") or "").strip()]
+    if not segments:
+        raise ExtractionError("This video has no usable transcript/captions.")
+    return segments
 
 
 def _extract_youtube_transcript(url: str) -> str:
@@ -188,13 +219,9 @@ def _extract_youtube_transcript(url: str) -> str:
     fallback is deferred to v1.5 (see docs/PLAN.md §3.1) to avoid a yt-dlp
     dependency and the associated rate-limit / bot-detection surface.
     """
-    video_id = _youtube_video_id(url)
-    if not video_id:
-        raise ExtractionError(f"Could not parse a YouTube video id from: {url}")
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-        segments = YouTubeTranscriptApi.get_transcript(video_id)
-        return " ".join(seg["text"] for seg in segments if seg.get("text"))
-    except Exception as exc:
-        logger.warning(f"YouTube transcript fetch failed for {url}: {exc}")
+        return " ".join(seg["text"] for seg in fetch_youtube_segments(url))
+    except ExtractionError as exc:
+        if "video id" in str(exc):
+            raise
         return ""

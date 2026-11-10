@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router"
 import { useState } from "react"
 import { toast } from "sonner"
 import { motion } from "framer-motion"
@@ -8,6 +8,7 @@ import { Logo } from "@/components/layout/Logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { authApi } from "@/lib/api"
+import { consumeReturnTo } from "@/lib/returnTo"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import { TOKEN_KEY, USER_KEY, type AuthUser } from "@/hooks/AuthContext"
@@ -38,6 +39,7 @@ const STYLES = [
 
 function OnboardingPage() {
   const nav = useNavigate()
+  const router = useRouter()
   const { user, updateUser } = useAuth()
   const [interests, setInterests] = useState<string[]>([])
   const [custom, setCustom] = useState("")
@@ -63,7 +65,9 @@ function OnboardingPage() {
       await authApi.updateProfile({ interests, goals, skill_level: level, learning_style: style, onboarded: true })
       if (user) updateUser({ ...user, interests, goals, skill_level: level, learning_style: style, onboarded: true } as AuthUser)
       toast.success("You're all set!")
-      nav({ to: "/home" })
+      const returnTo = consumeReturnTo()
+      if (returnTo) router.history.push(returnTo)
+      else nav({ to: "/home" })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save")
       setSaving(false)

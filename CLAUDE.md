@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AI-powered educational platform. Transforms a topic prompt or an uploaded/linked source → an interactive multimedia "luminar" (animated SVG scenes + TTS audio) via a multi-agent pipeline. **v1 is a student-only consumer learning platform** ("video + AI"): generate → review script → approve → watch with inline adaptive quizzes → track mastery/portfolio. Adaptive learning (mastery tracking) and real-time generation progress via WebSocket are live.
 
-**Deferred (code may exist but is NOT wired/live in v1):** teacher accounts & authored tests, standalone graded tests, sharing/enrollment, chat-against-luminar, knowledge-graph visualization, study rooms, Anki export, teach-back, Dodo subscription. See `docs/PLAN.md` for the roadmap. Do not treat these as current features.
+**Assessments (live, ported from the old `pulse`/`oraci` apps):** any user can build a question sheet over a YouTube video or one of their luminars (AI-drafted, AI-rewritable), publish it, and share `/take/{id}`. Learners answer in-line (YouTube pauses at each question's `time_s`), get an AI hint on a wrong answer, and the owner sees per-learner / per-question results. Backend: `api/v1/assessments.py`, `models/assessment.py`, `agents/assessment.py`, migration `0005_assessments`. Frontend: `routes/_authenticated/assessments.*`, `take.$assessmentId.tsx`, `components/assessment/`. No roles — whoever creates a sheet owns it. Questions lock once a sheet has responses (duplicate to edit).
+
+**Deferred (code may exist but is NOT wired/live in v1):** teacher accounts/roles, enrollment/classes, knowledge-graph visualization, study rooms, Anki export, teach-back, Dodo subscription. See `docs/PLAN.md` for the roadmap. Do not treat these as current features.
 
 ## Dev Commands
 
@@ -66,6 +68,10 @@ Generation runs in **two phases** orchestrated by `backend/app/jobs/luminar_jobs
 Status → `ready`. Progress broadcasts via WebSocket at `/api/v1/luminars/ws/{luminar_id}` through the in-process `app/core/ws_manager.py`.
 
 Agents present but **dormant in v1** (defined, not wired into the live flow): `code_gen`, `citation` (persistence TBD — see PLAN §3.3), `concept_extractor`, `teach_back_evaluator`.
+
+### Assessments — answer-leak contract
+
+Non-owners only receive `QuestionPublicOut` (no `correct_index`/`hint`/`explanation`), can only open **published** sheets, and a wrong answer returns an AI hint, never the answer. The owner previewing their own sheet is evaluated but not recorded. Shared links survive sign-in via `lib/returnTo.ts` (sessionStorage, same-origin paths only).
 
 ### Adaptive Learning
 

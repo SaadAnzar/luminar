@@ -6,6 +6,7 @@ from app.models.quiz import QuizCard, QuizAttempt
 from app.models.user_favorite import UserFavorite
 from app.models.knowledge_graph import ConceptNode, LuminarConceptLink
 from app.models.study_room import StudyRoom, StudyParticipant
+from app.models.assessment import Assessment, AssessmentQuestion, AssessmentSubmission, AssessmentAnswer
 
 __all__ = [
     "Base",
@@ -19,4 +20,8 @@ __all__ = [
     "LuminarConceptLink",
     "StudyRoom",
     "StudyParticipant",
+    "Assessment",
+    "AssessmentQuestion",
+    "AssessmentSubmission",
+    "AssessmentAnswer",
 ]

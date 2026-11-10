@@ -18,6 +18,7 @@ import {
   CompassIcon,
   PlayListIcon,
   SparklesIcon,
+  TaskDone01Icon,
 } from "@hugeicons/core-free-icons"
 
 interface Ctx {
@@ -62,6 +63,10 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
               <HugeiconsIcon icon={SparklesIcon} size={16} />
               <span>Create a new luminar</span>
             </CommandItem>
+            <CommandItem onSelect={() => go("/assessments/new")}>
+              <HugeiconsIcon icon={TaskDone01Icon} size={16} />
+              <span>Create an assessment</span>
+            </CommandItem>
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Navigate">
@@ -72,6 +77,10 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
             <CommandItem onSelect={() => go("/create")}>
               <HugeiconsIcon icon={MagicWand01Icon} size={16} />
               <span>Create</span>
+            </CommandItem>
+            <CommandItem onSelect={() => go("/assessments")}>
+              <HugeiconsIcon icon={TaskDone01Icon} size={16} />
+              <span>Assessments</span>
             </CommandItem>
             <CommandItem onSelect={() => go("/social")}>
               <HugeiconsIcon icon={CompassIcon} size={16} />

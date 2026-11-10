@@ -20,6 +20,8 @@ const labels: Record<string, string> = {
   watch: "Now playing",
   profile: "Profile",
   generating: "Generating",
+  assessments: "Assessments",
+  take: "Assessment",
   login: "Sign in",
   register: "Sign up",
 }
@@ -33,10 +35,10 @@ export function TopBar() {
   return (
     <header className={cn("glass sticky top-0 z-30 border-b")}>
       <div className="flex h-14 items-center gap-3 px-4 md:px-6">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Luminar</span>
-          <span className="text-muted-foreground/50">/</span>
-          <span className="font-medium">{topLabel}</span>
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          <span className="text-muted-foreground hidden sm:inline">Luminar</span>
+          <span className="text-muted-foreground/50 hidden sm:inline">/</span>
+          <span className="truncate font-medium">{topLabel}</span>
         </div>
 
         <div className="flex-1" />
@@ -44,12 +46,12 @@ export function TopBar() {
         <button
           onClick={toggle}
           className={cn(
-            "hover:border-foreground/20 text-muted-foreground inline-flex h-9 w-64 items-center gap-2 rounded-md border px-3 text-sm transition-colors",
+            "hover:border-foreground/20 text-muted-foreground inline-flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-md border text-sm transition-colors md:w-64 md:justify-start md:px-3",
           )}
         >
           <HugeiconsIcon icon={Search01Icon} size={15} />
-          <span className="flex-1 text-left">Search…</span>
-          <kbd className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[10px]">
+          <span className="hidden flex-1 text-left md:inline">Search…</span>
+          <kbd className="bg-muted text-muted-foreground hidden rounded px-1.5 py-0.5 font-mono text-[10px] md:inline">
             ⌘K
           </kbd>
         </button>

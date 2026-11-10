@@ -1,8 +1,9 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect } from "react"
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router"
+import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { useAuth } from "@/hooks/useAuth"
 import { authApi } from "@/lib/api"
+import { consumeReturnTo } from "@/lib/returnTo"
 
 export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
@@ -14,9 +15,15 @@ export const Route = createFileRoute("/auth/callback")({
  */
 function AuthCallback() {
   const nav = useNavigate()
+  const router = useRouter()
   const { setToken } = useAuth()
+  // OAuth codes are single-use: StrictMode's dev double-effect must not
+  // exchange it twice (the 2nd exchange fails and bounces to /signin).
+  const started = useRef(false)
 
   useEffect(() => {
+    if (started.current) return
+    started.current = true
     const params = new URLSearchParams(window.location.search)
     const code = params.get("code")
 
@@ -31,7 +38,14 @@ function AuthCallback() {
       .then(({ access_token, user }) => {
         setToken(access_token, user)
         toast.success("Signed in with Google!")
-        nav({ to: "/" })
+        // New users onboard first; onboarding then consumes the return path.
+        if ((user as { onboarded?: boolean }).onboarded === false) {
+          nav({ to: "/onboarding" })
+          return
+        }
+        const returnTo = consumeReturnTo()
+        if (returnTo) router.history.push(returnTo)
+        else nav({ to: "/" })
       })
       .catch(() => {
         toast.error("Could not complete sign-in. Please try again.")

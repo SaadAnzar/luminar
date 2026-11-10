@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from "axios"
 import { z } from "zod"
 import * as schemas from "./schemas"
+import { rememberReturnTo } from "./returnTo"
 
 export * from "./schemas"
 
@@ -33,6 +34,7 @@ api.interceptors.response.use(
       localStorage.removeItem("luminar_token")
       localStorage.removeItem("luminar_user")
       if (!window.location.pathname.startsWith("/signin")) {
+        rememberReturnTo(window.location.pathname + window.location.search)
         window.location.href = "/signin"
       }
     }
@@ -136,4 +138,67 @@ export const authApi = {
       .then((r) => r.data as { access_token: string; user: schemas.Profile }),
   profile: (userId: string) =>
     api.get(`/profiles/${userId}`).then((r) => parse(schemas.ProfileSchema, r.data)),
+}
+
+export interface AssessmentSourceInput {
+  source_type: schemas.AssessmentSourceType
+  youtube_url?: string | null
+  luminar_id?: string | null
+}
+
+export interface AssessmentCreateInput extends AssessmentSourceInput {
+  title: string
+  objective?: string | null
+  questions: schemas.DraftQuestion[]
+  published?: boolean
+}
+
+export const assessmentApi = {
+  draftQuestions: (body: AssessmentSourceInput & { num_questions: number; objective?: string | null }) =>
+    api
+      .post("/assessments/draft-questions", body)
+      .then((r) => parse(z.object({ questions: z.array(schemas.DraftQuestionSchema) }), r.data))
+      .then((d) => d.questions),
+
+  modifyQuestion: (question: schemas.DraftQuestion, instruction: string) =>
+    api
+      .post("/assessments/modify-question", { question, instruction })
+      .then((r) => parse(schemas.DraftQuestionSchema, r.data)),
+
+  create: (body: AssessmentCreateInput) =>
+    api.post("/assessments", body).then((r) => parse(schemas.AssessmentSchema, r.data)),
+
+  update: (id: string, body: { title?: string; objective?: string | null; questions?: schemas.DraftQuestion[] }) =>
+    api.put(`/assessments/${id}`, body).then((r) => parse(schemas.AssessmentSchema, r.data)),
+
+  setPublished: (id: string, published: boolean) =>
+    api.post(`/assessments/${id}/publish`, { published }).then((r) => r.data as { assessment_id: string; published: boolean }),
+
+  duplicate: (id: string) =>
+    api.post(`/assessments/${id}/duplicate`).then((r) => parse(schemas.AssessmentSchema, r.data)),
+
+  remove: (id: string) => api.delete(`/assessments/${id}`),
+
+  mine: () => api.get("/assessments/me").then((r) => parse(z.array(schemas.AssessmentSummarySchema), r.data)),
+
+  get: (id: string) => api.get(`/assessments/${id}`).then((r) => parse(schemas.AssessmentSchema, r.data)),
+
+  progress: (id: string) =>
+    api.get(`/assessments/${id}/progress`).then((r) => parse(z.array(schemas.AnswerStateSchema), r.data)),
+
+  answer: (id: string, questionId: string, selectedIndex: number) =>
+    api
+      .post(`/assessments/${id}/questions/${questionId}/answer`, { selected_index: selectedIndex })
+      .then((r) => parse(schemas.AnswerResultSchema, r.data)),
+
+  responses: (id: string) =>
+    api.get(`/assessments/${id}/responses`).then((r) => parse(schemas.AssessmentResponsesSchema, r.data)),
+}
+
+/** FastAPI error → readable message (422 validation arrays included). */
+export function apiErrorMessage(err: unknown, fallback = "Something went wrong"): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === "string") return detail
+  if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg).replace(/^Value error, /, "")
+  return err instanceof Error ? err.message : fallback
 }
