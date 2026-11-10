@@ -15,6 +15,11 @@ def _s3():
     )
 
 
+def public_url(file_path: str) -> str:
+    """Public URL of an object in the app's storage bucket."""
+    return f"{settings.SUPABASE_URL}/storage/v1/object/public/{settings.S3_BUCKET}/{file_path}"
+
+
 async def upload_file(file_content: bytes, file_path: str, content_type: str) -> str:
     """Upload to Supabase S3-compatible storage, return public URL."""
     try:
@@ -24,7 +29,7 @@ async def upload_file(file_content: bytes, file_path: str, content_type: str) ->
             Body=file_content,
             ContentType=content_type,
         )
-        url = f"{settings.SUPABASE_URL}/storage/v1/object/public/{settings.S3_BUCKET}/{file_path}"
+        url = public_url(file_path)
         logger.info(f"Uploaded: {file_path}")
         return url
     except Exception as e:

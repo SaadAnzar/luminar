@@ -47,6 +47,12 @@ export interface ExportProgress {
   total: number
 }
 
+export interface ExportResult {
+  blob: Blob
+  /** Things that didn't make it into the file (shown to the user). */
+  warnings: string[]
+}
+
 export interface ExportOptions {
   fps?: number
   captions?: boolean
@@ -311,7 +317,7 @@ async function decodeAudio(url: string, decoder: BaseAudioContext, signal?: Abor
   }
 }
 
-export async function exportLuminarMp4(scenes: Scene[], opts: ExportOptions = {}): Promise<Blob> {
+export async function exportLuminarMp4(scenes: Scene[], opts: ExportOptions = {}): Promise<ExportResult> {
   const { fps = 15, captions = true, signal, onProgress } = opts
   if (!exportSupported()) throw new ExportUnsupportedError("This browser can't encode video. Try a recent Chrome, Edge or Safari.")
   const videoCodec = await getFirstEncodableVideoCodec(["avc", "vp9", "av1"], { width: WIDTH, height: HEIGHT })
@@ -330,6 +336,13 @@ export async function exportLuminarMp4(scenes: Scene[], opts: ExportOptions = {}
     svgs.push(s.svg_url ? await fetchText(s.svg_url, signal) : null)
     onProgress?.({ phase: "preparing", done: i + 1, total: ordered.length })
   }
+  const plural = (n: number, word: string) => `${n} scene${n === 1 ? "" : "s"} ${word}`
+  const warnings: string[] = []
+  const lostAudio = ordered.filter((s, i) => s.audio_url && !audio[i]).length
+  const lostVisual = ordered.filter((s, i) => s.svg_url && !svgs[i]).length
+  if (lostAudio) warnings.push(`${plural(lostAudio, lostAudio === 1 ? "lost its narration" : "lost their narration")} (couldn't load the audio)`)
+  if (lostVisual) warnings.push(`${plural(lostVisual, "used a placeholder")} (couldn't load the visual)`)
+
   const durations = ordered.map((s, i) => (audio[i] ? audio[i]!.duration * 1000 : s.duration_ms || DEFAULT_SCENE_MS))
   const starts = durations.map((_, i) => durations.slice(0, i).reduce((a, b) => a + b, 0))
   const totalMs = durations.reduce((a, b) => a + b, 0)
@@ -349,6 +362,7 @@ export async function exportLuminarMp4(scenes: Scene[], opts: ExportOptions = {}
   const audioCodec = mixed
     ? await getFirstEncodableAudioCodec(["aac", "opus"], { numberOfChannels: 1, sampleRate: SAMPLE_RATE })
     : null
+  if (mixed && !audioCodec) warnings.push("This browser can't encode audio, so the video is silent")
 
   // 2. Muxer + encoders.
   const canvas = document.createElement("canvas")
@@ -403,5 +417,5 @@ export async function exportLuminarMp4(scenes: Scene[], opts: ExportOptions = {}
 
   const buffer = (output.target as BufferTarget).buffer
   if (!buffer) throw new Error("The video encoder produced no output")
-  return new Blob([buffer], { type: "video/mp4" })
+  return { blob: new Blob([buffer], { type: "video/mp4" }), warnings }
 }

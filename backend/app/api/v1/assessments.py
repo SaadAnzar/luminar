@@ -80,6 +80,22 @@ async def _get_owned_luminar(db: AsyncSession, luminar_id: uuid.UUID, user: User
     return luminar
 
 
+def _video_prefix(user: User) -> str:
+    from app.services.storage import public_url
+    return public_url(f"assessment-videos/{user.id}/")
+
+
+def _check_source_urls(body: AssessmentCreate, user: User) -> None:
+    """Source URLs end up in learners' pages, so only accept a real YouTube
+    video link or a video this user uploaded through /upload-video."""
+    from app.agents.data_extractor import youtube_video_id
+
+    if body.source_type == "youtube" and not youtube_video_id(body.youtube_url or ""):
+        raise HTTPException(status_code=422, detail="That doesn't look like a YouTube video link")
+    if body.source_type == "upload" and not (body.video_url or "").startswith(_video_prefix(user)):
+        raise HTTPException(status_code=422, detail="Upload the video through Luminar first")
+
+
 def _to_out(assessment: Assessment, user: User, submission_count: int) -> AssessmentOut:
     is_owner = assessment.user_id == user.id
     item_cls = QuestionOwnerOut if is_owner else QuestionPublicOut
@@ -214,6 +230,7 @@ async def create_assessment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AssessmentOut:
+    _check_source_urls(body, current_user)
     if body.source_type == "luminar":
         await _get_owned_luminar(db, body.luminar_id, current_user)  # type: ignore[arg-type]
 

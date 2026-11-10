@@ -44,7 +44,7 @@ export function ExportVideoButton({ title, scenes }: { title: string; scenes: Sc
     try {
       // Loaded on demand: the encoder/muxer is only needed when someone exports.
       const { exportLuminarMp4 } = await import("@/lib/exportMp4")
-      const blob = await exportLuminarMp4(scenes, { captions, signal: ctrl.signal, onProgress: setProgress })
+      const { blob, warnings } = await exportLuminarMp4(scenes, { captions, signal: ctrl.signal, onProgress: setProgress })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -53,7 +53,8 @@ export function ExportVideoButton({ title, scenes }: { title: string; scenes: Sc
       a.click()
       a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      toast.success("Video downloaded")
+      if (warnings.length) toast.warning("Video downloaded with gaps", { description: warnings.join(" · "), duration: 10_000 })
+      else toast.success("Video downloaded")
       setOpen(false)
     } catch (e) {
       if ((e as Error).name === "AbortError") toast("Export cancelled")
