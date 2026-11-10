@@ -20,6 +20,7 @@ export function AnswerCard({
   number,
   total,
   onSolved,
+  onAttempt,
   onContinue,
   onSkip,
 }: {
@@ -28,6 +29,8 @@ export function AnswerCard({
   number: number
   total: number
   onSolved: (result: AnswerResult) => void
+  /** Every checked answer, right or wrong (used for the end-of-test breakdown). */
+  onAttempt?: (result: AnswerResult) => void
   onContinue: () => void
   onSkip?: () => void
 }) {
@@ -44,6 +47,7 @@ export function AnswerCard({
     try {
       const r = await assessmentApi.answer(assessmentId, question.id, selected)
       setResult(r)
+      onAttempt?.(r)
       if (r.is_correct) onSolved(r)
       else setWrong((w) => new Set(w).add(selected))
     } catch (e) {

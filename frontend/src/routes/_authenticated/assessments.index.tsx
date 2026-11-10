@@ -11,6 +11,7 @@ import {
   PencilEdit02Icon,
   PlayListIcon,
   TaskDone01Icon,
+  Video01Icon,
   ViewIcon,
   YoutubeIcon,
 } from "@hugeicons/core-free-icons"
@@ -74,7 +75,7 @@ function AssessmentRow({ a }: { a: AssessmentSummary }) {
   return (
     <div className="edge-light flex flex-col gap-4 rounded-2xl border border-border/60 bg-card p-5 sm:flex-row sm:items-center">
       <div className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-xl">
-        <HugeiconsIcon icon={a.source_type === "youtube" ? YoutubeIcon : PlayListIcon} size={20} />
+        <HugeiconsIcon icon={a.source_type === "youtube" ? YoutubeIcon : a.source_type === "upload" ? Video01Icon : PlayListIcon} size={20} />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -87,6 +88,9 @@ function AssessmentRow({ a }: { a: AssessmentSummary }) {
           )}>
             {a.published ? "Published" : "Draft"}
           </span>
+          {a.published && a.listed && (
+            <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-[10px] font-semibold">In Discover</span>
+          )}
         </div>
         <div className="text-muted-foreground mt-1 text-xs">
           {a.question_count} question{a.question_count === 1 ? "" : "s"} · {a.submission_count} learner{a.submission_count === 1 ? "" : "s"}

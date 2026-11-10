@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatPanel } from "@/components/player/ChatPanel"
+import { EngagementBar } from "@/components/player/EngagementBar"
 import { SceneRenderer } from "@/components/player/SceneRenderer"
 import { PlayerControls } from "@/components/player/PlayerControls"
 import { QuizOverlay } from "@/components/player/QuizOverlay"
@@ -336,6 +337,8 @@ function WatchPage() {
         </div>
 
         <div className="flex-1" />
+
+        <EngagementBar luminarId={luminarId} />
 
         {isOwner && (
           <Button

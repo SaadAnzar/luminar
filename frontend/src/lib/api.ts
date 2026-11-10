@@ -78,6 +78,16 @@ export const luminarApi = {
   setPublished: (luminarId: string, published: boolean) =>
     api.post(`/luminars/${luminarId}/publish`, { published }).then((r) => r.data as { luminar_id: string; published: boolean }),
 
+  engagement: (luminarId: string) =>
+    api.get(`/luminars/${luminarId}/engagement`).then((r) => parse(schemas.EngagementSchema, r.data)),
+
+  setLiked: (luminarId: string, liked: boolean) =>
+    (liked ? api.post(`/luminars/${luminarId}/like`) : api.delete(`/luminars/${luminarId}/like`))
+      .then((r) => parse(schemas.EngagementSchema, r.data)),
+
+  recordView: (luminarId: string) =>
+    api.post(`/luminars/${luminarId}/view`).then((r) => parse(schemas.EngagementSchema, r.data)),
+
   chat: (luminarId: string, message: string, history: { role: string; content: string }[]) =>
     api.post(`/luminars/${luminarId}/chat`, { message, history }).then((r) => r.data as { answer: string }),
 
@@ -144,6 +154,8 @@ export interface AssessmentSourceInput {
   source_type: schemas.AssessmentSourceType
   youtube_url?: string | null
   luminar_id?: string | null
+  video_url?: string | null
+  transcript?: schemas.TranscriptSegment[] | null
 }
 
 export interface AssessmentCreateInput extends AssessmentSourceInput {
@@ -151,6 +163,7 @@ export interface AssessmentCreateInput extends AssessmentSourceInput {
   objective?: string | null
   questions: schemas.DraftQuestion[]
   published?: boolean
+  listed?: boolean
 }
 
 export const assessmentApi = {
@@ -168,7 +181,7 @@ export const assessmentApi = {
   create: (body: AssessmentCreateInput) =>
     api.post("/assessments", body).then((r) => parse(schemas.AssessmentSchema, r.data)),
 
-  update: (id: string, body: { title?: string; objective?: string | null; questions?: schemas.DraftQuestion[] }) =>
+  update: (id: string, body: { title?: string; objective?: string | null; questions?: schemas.DraftQuestion[]; listed?: boolean }) =>
     api.put(`/assessments/${id}`, body).then((r) => parse(schemas.AssessmentSchema, r.data)),
 
   setPublished: (id: string, published: boolean) =>
@@ -178,6 +191,18 @@ export const assessmentApi = {
     api.post(`/assessments/${id}/duplicate`).then((r) => parse(schemas.AssessmentSchema, r.data)),
 
   remove: (id: string) => api.delete(`/assessments/${id}`),
+
+  uploadVideo: (file: File, onProgress?: (pct: number) => void) => {
+    const fd = new FormData()
+    fd.append("file", file)
+    return api
+      .post("/assessments/upload-video", fd, {
+        onUploadProgress: (e) => e.total && onProgress?.(Math.round((e.loaded / e.total) * 100)),
+      })
+      .then((r) => parse(schemas.VideoUploadSchema, r.data))
+  },
+
+  directory: () => api.get("/assessments/discover").then((r) => parse(z.array(schemas.DirectoryItemSchema), r.data)),
 
   mine: () => api.get("/assessments/me").then((r) => parse(z.array(schemas.AssessmentSummarySchema), r.data)),
 

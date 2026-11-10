@@ -5,7 +5,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-SourceType = Literal["youtube", "luminar"]
+SourceType = Literal["youtube", "upload", "luminar"]
+
+
+class TranscriptSegment(BaseModel):
+    text: str = Field(max_length=2000)
+    start: float = Field(ge=0)
+    duration: float = Field(default=0, ge=0)
 
 
 class QuestionIn(BaseModel):
@@ -29,11 +35,16 @@ class AssessmentSource(BaseModel):
     source_type: SourceType
     youtube_url: str | None = None
     luminar_id: uuid.UUID | None = None
+    video_url: str | None = None
+    # Uploaded videos only: the timed transcript returned by /upload-video.
+    transcript: list[TranscriptSegment] | None = Field(default=None, max_length=5000)
 
     @model_validator(mode="after")
     def _source_ref(self) -> "AssessmentSource":
         if self.source_type == "youtube" and not (self.youtube_url or "").strip():
             raise ValueError("youtube_url is required for a YouTube assessment")
+        if self.source_type == "upload" and not (self.video_url or "").strip():
+            raise ValueError("video_url is required for an uploaded-video assessment")
         if self.source_type == "luminar" and not self.luminar_id:
             raise ValueError("luminar_id is required for a luminar assessment")
         return self
@@ -54,12 +65,14 @@ class AssessmentCreate(AssessmentSource):
     objective: str | None = None
     questions: list[QuestionIn] = Field(min_length=1)
     published: bool = False
+    listed: bool = False
 
 
 class AssessmentUpdate(BaseModel):
     title: str | None = None
     objective: str | None = None
     questions: list[QuestionIn] | None = None
+    listed: bool | None = None
 
 
 class PublishIn(BaseModel):
@@ -101,7 +114,9 @@ class AssessmentOut(BaseModel):
     source_type: SourceType
     youtube_url: str | None = None
     luminar_id: uuid.UUID | None = None
+    video_url: str | None = None
     published: bool
+    listed: bool = False
     is_owner: bool = False
     author_name: str | None = None
     submission_count: int = 0
@@ -109,6 +124,8 @@ class AssessmentOut(BaseModel):
     updated_at: datetime
     # Owner gets QuestionOwnerOut items; everyone else gets QuestionPublicOut.
     questions: list[QuestionOwnerOut | QuestionPublicOut]
+    # Owner only (uploaded videos): lets the builder draft more questions.
+    transcript: list[TranscriptSegment] | None = None
 
 
 class AssessmentSummary(BaseModel):
@@ -117,9 +134,30 @@ class AssessmentSummary(BaseModel):
     objective: str | None = None
     source_type: SourceType
     published: bool
+    listed: bool = False
     question_count: int
     submission_count: int
     created_at: datetime
+
+
+class DirectoryItem(BaseModel):
+    """Public directory card — never includes questions or answers."""
+    id: uuid.UUID
+    title: str
+    objective: str | None = None
+    source_type: SourceType
+    youtube_url: str | None = None
+    author_name: str
+    author_avatar_url: str | None = None
+    question_count: int
+    learner_count: int
+    created_at: datetime
+
+
+class VideoUploadOut(BaseModel):
+    video_url: str
+    transcript: list[TranscriptSegment]
+    duration_s: float
 
 
 class AnswerStateOut(BaseModel):

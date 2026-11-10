@@ -7,7 +7,7 @@ published assessments, and a wrong answer returns a hint, never the answer.
 import asyncio
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from loguru import logger
 from sqlalchemy import select, func, desc
 from sqlalchemy.exc import IntegrityError
@@ -22,9 +22,14 @@ from app.models.scene import Scene
 from app.models.user import User
 from app.schemas.assessment import (
     AnswerIn, AnswerResult, AnswerStateOut, AssessmentCreate, AssessmentOut, AssessmentResponsesOut,
-    AssessmentSummary, AssessmentUpdate, DraftQuestionsIn, LearnerResult, ModifyQuestionIn, PublishIn,
-    QuestionIn, QuestionOwnerOut, QuestionPublicOut, QuestionStat,
+    AssessmentSummary, AssessmentUpdate, DirectoryItem, DraftQuestionsIn, LearnerResult, ModifyQuestionIn,
+    PublishIn, QuestionIn, QuestionOwnerOut, QuestionPublicOut, QuestionStat, VideoUploadOut,
 )
+
+TIMED_SOURCES = ("youtube", "upload")
+VIDEO_TYPES = {".mp4": "video/mp4", ".webm": "video/webm"}
+# Matches Supabase Storage's default per-file limit.
+MAX_VIDEO_BYTES = 50 * 1024 * 1024
 
 router = APIRouter()
 
@@ -86,24 +91,27 @@ def _to_out(assessment: Assessment, user: User, submission_count: int) -> Assess
         source_type=assessment.source_type,
         youtube_url=assessment.youtube_url,
         luminar_id=assessment.luminar_id,
+        video_url=assessment.video_url,
         published=assessment.published,
+        listed=assessment.listed,
         is_owner=is_owner,
         author_name=assessment.user.name if assessment.user else None,
         submission_count=submission_count if is_owner else 0,
         created_at=assessment.created_at,
         updated_at=assessment.updated_at,
         questions=[item_cls.model_validate(q) for q in assessment.questions],
+        transcript=assessment.transcript if is_owner else None,
     )
 
 
 def _build_questions(items: list[QuestionIn], source_type: str) -> list[AssessmentQuestion]:
-    if source_type == "youtube":
+    if source_type in TIMED_SOURCES:
         # Playback pauses at each time_s, so keep them in timeline order.
         items = sorted(items, key=lambda q: (q.time_s is None, q.time_s or 0))
     return [
         AssessmentQuestion(
             position=i,
-            time_s=q.time_s if source_type == "youtube" else None,
+            time_s=q.time_s if source_type in TIMED_SOURCES else None,
             question=q.question.strip(),
             options=[o.strip() for o in q.options],
             correct_index=q.correct_index,
@@ -133,6 +141,10 @@ async def draft_questions(
         except ExtractionError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         content = "TIMED TRANSCRIPT:\n" + format_timed_transcript(segments)
+    elif body.source_type == "upload":
+        if not body.transcript:
+            raise HTTPException(status_code=422, detail="Upload the video first so it can be transcribed")
+        content = "TIMED TRANSCRIPT:\n" + format_timed_transcript([s.model_dump() for s in body.transcript])
     else:
         luminar = await _get_owned_luminar(db, body.luminar_id, current_user)  # type: ignore[arg-type]
         scenes = (await db.execute(
@@ -158,7 +170,7 @@ async def draft_questions(
             correct_index=q.correct_index,
             hint=q.hint,
             explanation=q.explanation,
-            time_s=q.time_s if body.source_type == "youtube" else None,
+            time_s=q.time_s if body.source_type in TIMED_SOURCES else None,
         )
         for q in result.output.questions[: body.num_questions]
     ]
@@ -212,7 +224,10 @@ async def create_assessment(
         source_type=body.source_type,
         youtube_url=body.youtube_url if body.source_type == "youtube" else None,
         luminar_id=body.luminar_id if body.source_type == "luminar" else None,
+        video_url=body.video_url if body.source_type == "upload" else None,
+        transcript=[s.model_dump() for s in body.transcript] if body.source_type == "upload" and body.transcript else None,
         published=body.published,
+        listed=body.listed,
         questions=_build_questions(body.questions, body.source_type),
     )
     db.add(assessment)
@@ -243,10 +258,78 @@ async def my_assessments(
     return [
         AssessmentSummary(
             id=a.id, title=a.title, objective=a.objective, source_type=a.source_type,
-            published=a.published, question_count=qc, submission_count=sc, created_at=a.created_at,
+            published=a.published, listed=a.listed, question_count=qc, submission_count=sc, created_at=a.created_at,
         )
         for a, qc, sc in rows
     ]
+
+
+@router.get("/discover", response_model=list[DirectoryItem])
+async def assessment_directory(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[DirectoryItem]:
+    """Public directory: assessments their owners both published and listed."""
+    q_count = (
+        select(func.count(AssessmentQuestion.id))
+        .where(AssessmentQuestion.assessment_id == Assessment.id)
+        .scalar_subquery()
+    )
+    s_count = (
+        select(func.count(AssessmentSubmission.id))
+        .where(AssessmentSubmission.assessment_id == Assessment.id)
+        .scalar_subquery()
+    )
+    rows = (await db.execute(
+        select(Assessment, User.name, User.avatar_url, q_count, s_count)
+        .join(User, User.id == Assessment.user_id)
+        .where(Assessment.published.is_(True), Assessment.listed.is_(True))
+        .order_by(desc(Assessment.created_at))
+        .limit(60)
+    )).all()
+    return [
+        DirectoryItem(
+            id=a.id, title=a.title, objective=a.objective, source_type=a.source_type,
+            youtube_url=a.youtube_url, author_name=name, author_avatar_url=avatar,
+            question_count=qc, learner_count=sc, created_at=a.created_at,
+        )
+        for a, name, avatar, qc, sc in rows
+    ]
+
+
+@router.post("/upload-video", response_model=VideoUploadOut)
+async def upload_video(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> VideoUploadOut:
+    """Store an owner's video and transcribe it into timed segments for drafting."""
+    from pathlib import Path
+    from app.services.storage import upload_file
+    from app.services.whisper_service import TranscriptionError, transcribe_segments
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in VIDEO_TYPES:
+        raise HTTPException(status_code=415, detail="Upload an MP4 or WebM video")
+
+    chunks, size = [], 0
+    while chunk := await file.read(1024 * 1024):
+        size += len(chunk)
+        if size > MAX_VIDEO_BYTES:
+            raise HTTPException(status_code=413, detail="Videos can be up to 50 MB")
+        chunks.append(chunk)
+    data = b"".join(chunks)
+    if not data:
+        raise HTTPException(status_code=400, detail="The file is empty")
+
+    # Transcribe first so a video we can't use is never stored.
+    try:
+        segments = await transcribe_segments(data, f"upload{ext}")
+    except TranscriptionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    url = await upload_file(data, f"assessment-videos/{current_user.id}/{uuid.uuid4()}{ext}", VIDEO_TYPES[ext])
+    last = segments[-1]
+    return VideoUploadOut(video_url=url, transcript=segments, duration_s=last["start"] + last["duration"])
 
 
 @router.get("/{assessment_id}", response_model=AssessmentOut)
@@ -276,6 +359,8 @@ async def update_assessment(
         assessment.title = body.title.strip()
     if body.objective is not None:
         assessment.objective = body.objective
+    if body.listed is not None:
+        assessment.listed = body.listed
     if body.questions is not None:
         if count > 0:
             # Editing questions/answers under existing responses would silently
@@ -320,7 +405,10 @@ async def duplicate_assessment(
         source_type=src.source_type,
         youtube_url=src.youtube_url,
         luminar_id=src.luminar_id,
+        video_url=src.video_url,
+        transcript=src.transcript,
         published=False,
+        listed=False,
         questions=[
             AssessmentQuestion(
                 position=q.position, time_s=q.time_s, question=q.question, options=list(q.options),

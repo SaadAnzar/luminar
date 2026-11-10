@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -9,16 +9,19 @@ import {
   Alert02Icon,
   Copy01Icon,
   PlayListIcon,
+  UploadIcon,
+  Video01Icon,
   YoutubeIcon,
 } from "@hugeicons/core-free-icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FadeIn } from "@/components/motion/FadeIn"
 import { QuestionEditor } from "@/components/assessment/QuestionEditor"
 import { emptyQuestion } from "@/lib/assessment"
 import { assessmentApi, apiErrorMessage, luminarApi } from "@/lib/api"
-import type { Assessment, AssessmentSourceType, DraftQuestion } from "@/lib/schemas"
+import type { Assessment, AssessmentSourceType, DraftQuestion, TranscriptSegment } from "@/lib/schemas"
 import { formatTime, youtubeVideoId } from "@/lib/youtube"
 import { cn } from "@/lib/utils"
 
@@ -60,8 +63,14 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
   const [questions, setQuestions] = useState<DraftQuestion[]>(initial ? toDraft(initial) : [])
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [listed, setListed] = useState(initial?.listed ?? false)
+  // Uploaded video: stored URL + Whisper transcript (kept for "Generate more").
+  const [videoUrl, setVideoUrl] = useState(initial?.video_url ?? "")
+  const [transcript, setTranscript] = useState<TranscriptSegment[]>(initial?.transcript ?? [])
+  const [uploadPct, setUploadPct] = useState<number | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const timed = sourceType === "youtube"
+  const timed = sourceType === "youtube" || sourceType === "upload"
   const videoId = youtubeVideoId(youtubeUrl)
 
   const { data: luminars = [] } = useQuery({
@@ -71,19 +80,46 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
   })
   const readyLuminars = useMemo(() => luminars.filter((l) => l.status === "ready"), [luminars])
 
-  const sourceReady = timed ? !!videoId : !!luminarId
+  const sourceReady =
+    sourceType === "youtube" ? !!videoId : sourceType === "upload" ? !!videoUrl && transcript.length > 0 : !!luminarId
+  const sourceHint =
+    sourceType === "youtube" ? "Paste a valid YouTube link first" : sourceType === "upload" ? "Upload a video first" : "Pick a luminar first"
+
+  const sourcePayload = () => ({
+    source_type: sourceType,
+    youtube_url: sourceType === "youtube" ? youtubeUrl : null,
+    luminar_id: sourceType === "luminar" ? luminarId : null,
+    video_url: sourceType === "upload" ? videoUrl : null,
+    transcript: sourceType === "upload" ? transcript : null,
+  })
+
+  async function uploadVideo(file: File) {
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    if (ext !== "mp4" && ext !== "webm") return toast.error("Upload an MP4 or WebM video")
+    if (file.size > 50 * 1024 * 1024) return toast.error("Videos can be up to 50 MB")
+    setUploadPct(0)
+    try {
+      const up = await assessmentApi.uploadVideo(file, setUploadPct)
+      setVideoUrl(up.video_url)
+      setTranscript(up.transcript)
+      if (!title.trim()) setTitle(file.name.replace(/\.[^.]+$/, ""))
+      toast.success(`Transcribed ${formatTime(up.duration_s)} of video`)
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Could not upload the video"))
+    } finally {
+      setUploadPct(null)
+    }
+  }
 
   async function generate() {
     if (!sourceReady) {
-      toast.error(timed ? "Paste a valid YouTube link first" : "Pick a luminar first")
+      toast.error(sourceHint)
       return
     }
     setGenerating(true)
     try {
       const drafted = await assessmentApi.draftQuestions({
-        source_type: sourceType,
-        youtube_url: timed ? youtubeUrl : null,
-        luminar_id: timed ? null : luminarId,
+        ...sourcePayload(),
         num_questions: Number(numQuestions),
         objective: objective || null,
       })
@@ -105,7 +141,7 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
 
   async function save(publish: boolean) {
     if (!title.trim()) return toast.error("Give your assessment a title")
-    if (!sourceReady) return toast.error(timed ? "Paste a valid YouTube link" : "Pick a luminar")
+    if (!sourceReady) return toast.error(sourceHint)
     const problem = locked ? null : validate(questions, timed)
     if (problem) return toast.error(problem)
 
@@ -116,6 +152,7 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
         saved = await assessmentApi.update(initial.id, {
           title,
           objective: objective || null,
+          listed,
           ...(locked ? {} : { questions }),
         })
         if (publish !== saved.published) await assessmentApi.setPublished(saved.id, publish)
@@ -123,11 +160,10 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
         saved = await assessmentApi.create({
           title,
           objective: objective || null,
-          source_type: sourceType,
-          youtube_url: timed ? youtubeUrl : null,
-          luminar_id: timed ? null : luminarId,
+          ...sourcePayload(),
           questions,
           published: publish,
+          listed,
         })
       }
       qc.invalidateQueries({ queryKey: ["assessments"] })
@@ -198,9 +234,10 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
 
       {/* Source */}
       <section className="edge-light mb-5 space-y-4 rounded-2xl border border-border/70 bg-card p-5">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           {([
             { v: "youtube", label: "YouTube video", icon: YoutubeIcon },
+            { v: "upload", label: "Upload a video", icon: Video01Icon },
             { v: "luminar", label: "One of my luminars", icon: PlayListIcon },
           ] as const).map((o) => (
             <button
@@ -219,7 +256,46 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
           ))}
         </div>
 
-        {timed ? (
+        {sourceType === "upload" ? (
+          <div className="space-y-2">
+            {videoUrl ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <video src={videoUrl} controls preload="metadata" className="h-28 rounded-lg border border-border bg-black" />
+                <div className="text-muted-foreground text-xs">
+                  Transcribed — {transcript.length} segments
+                  {transcript.length > 0 && `, ${formatTime(transcript[transcript.length - 1].start + transcript[transcript.length - 1].duration)} long`}.
+                  {!editing && (
+                    <button type="button" className="text-primary ml-2 font-medium" onClick={() => fileRef.current?.click()}>
+                      Replace
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={uploadPct !== null}
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) uploadVideo(f) }}
+                className="text-muted-foreground hover:border-primary/40 flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-border p-6 text-sm"
+              >
+                <HugeiconsIcon icon={UploadIcon} size={22} />
+                {uploadPct === null
+                  ? "Drop an MP4 or WebM (up to 50 MB) or click to browse"
+                  : uploadPct < 100 ? `Uploading… ${uploadPct}%` : "Transcribing the audio… this can take a minute"}
+              </button>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".mp4,.webm,video/mp4,video/webm"
+              className="hidden"
+              data-testid="video-file"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadVideo(f); e.target.value = "" }}
+            />
+          </div>
+        ) : sourceType === "youtube" ? (
           <div className="space-y-2">
             <Input
               type="url"
@@ -255,6 +331,16 @@ export function AssessmentBuilder({ initial }: { initial?: Assessment }) {
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
           <Input value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="Learning objective (optional)" />
         </div>
+
+        <label className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+          <span>
+            <span className="block text-sm font-medium">List in Discover</span>
+            <span className="text-muted-foreground block text-xs">
+              Once published, anyone on Luminar can find and take it — not just people with the link.
+            </span>
+          </span>
+          <Switch checked={listed} onCheckedChange={setListed} aria-label="List in Discover" />
+        </label>
 
         {!locked && (
           <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">

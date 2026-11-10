@@ -255,6 +255,106 @@ async def set_published(
 
 
 # ---------------------------------------------------------------------------
+# Public engagement — likes and unique views
+# ---------------------------------------------------------------------------
+
+class EngagementOut(BaseModel):
+    like_count: int
+    view_count: int
+    liked_by_me: bool
+
+
+async def _engagement(db: AsyncSession, luminar_id: uuid.UUID, user_id: uuid.UUID) -> EngagementOut:
+    from sqlalchemy import func
+    from app.models.engagement import LuminarLike, LuminarView
+
+    likes = (await db.execute(
+        select(func.count(LuminarLike.id)).where(LuminarLike.luminar_id == luminar_id)
+    )).scalar_one()
+    views = (await db.execute(
+        select(func.count(LuminarView.id)).where(LuminarView.luminar_id == luminar_id)
+    )).scalar_one()
+    mine = (await db.execute(
+        select(LuminarLike.id).where(LuminarLike.luminar_id == luminar_id, LuminarLike.user_id == user_id)
+    )).first() is not None
+    return EngagementOut(like_count=likes, view_count=views, liked_by_me=mine)
+
+
+async def _ready_luminar(db: AsyncSession, luminar_id: uuid.UUID) -> Luminar:
+    luminar = (await db.execute(select(Luminar).where(Luminar.id == luminar_id))).scalar_one_or_none()
+    if not luminar or luminar.status != READY_STATUS:
+        raise HTTPException(status_code=404, detail="Luminar not found")
+    return luminar
+
+
+@router.get("/{luminar_id}/engagement", response_model=EngagementOut)
+async def get_engagement(
+    luminar_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EngagementOut:
+    await _ready_luminar(db, luminar_id)
+    return await _engagement(db, luminar_id, current_user.id)
+
+
+@router.post("/{luminar_id}/like", response_model=EngagementOut)
+async def like_luminar(
+    luminar_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EngagementOut:
+    from sqlalchemy.dialects.postgresql import insert
+    from app.models.engagement import LuminarLike
+
+    await _ready_luminar(db, luminar_id)
+    await db.execute(
+        insert(LuminarLike)
+        .values(id=uuid.uuid4(), user_id=current_user.id, luminar_id=luminar_id)
+        .on_conflict_do_nothing(constraint="uix_luminar_like_user")
+    )
+    await db.commit()
+    return await _engagement(db, luminar_id, current_user.id)
+
+
+@router.delete("/{luminar_id}/like", response_model=EngagementOut)
+async def unlike_luminar(
+    luminar_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EngagementOut:
+    from sqlalchemy import delete
+    from app.models.engagement import LuminarLike
+
+    await _ready_luminar(db, luminar_id)
+    await db.execute(
+        delete(LuminarLike).where(LuminarLike.luminar_id == luminar_id, LuminarLike.user_id == current_user.id)
+    )
+    await db.commit()
+    return await _engagement(db, luminar_id, current_user.id)
+
+
+@router.post("/{luminar_id}/view", response_model=EngagementOut)
+async def record_view(
+    luminar_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EngagementOut:
+    """Count a unique viewer (once per user; the author's own views don't count)."""
+    from sqlalchemy.dialects.postgresql import insert
+    from app.models.engagement import LuminarView
+
+    luminar = await _ready_luminar(db, luminar_id)
+    if luminar.user_id != current_user.id:
+        await db.execute(
+            insert(LuminarView)
+            .values(id=uuid.uuid4(), user_id=current_user.id, luminar_id=luminar_id)
+            .on_conflict_do_nothing(constraint="uix_luminar_view_user")
+        )
+        await db.commit()
+    return await _engagement(db, luminar_id, current_user.id)
+
+
+# ---------------------------------------------------------------------------
 # Tutor chat — grounded in the luminar
 # ---------------------------------------------------------------------------
 

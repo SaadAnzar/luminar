@@ -7,6 +7,7 @@ from app.models.user_favorite import UserFavorite
 from app.models.knowledge_graph import ConceptNode, LuminarConceptLink
 from app.models.study_room import StudyRoom, StudyParticipant
 from app.models.assessment import Assessment, AssessmentQuestion, AssessmentSubmission, AssessmentAnswer
+from app.models.engagement import LuminarLike, LuminarView
 
 __all__ = [
     "Base",
@@ -24,4 +25,6 @@ __all__ = [
     "AssessmentQuestion",
     "AssessmentSubmission",
     "AssessmentAnswer",
+    "LuminarLike",
+    "LuminarView",
 ]

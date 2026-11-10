@@ -26,15 +26,22 @@ class Assessment(AuditMixin, Base):
     objective: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # 'youtube' → timed questions over an embedded YouTube video
+    # 'upload'  → timed questions over a video file the owner uploaded
     # 'luminar' → questions over one of the owner's luminars (untimed list)
     source_type: Mapped[str] = mapped_column(String(16), nullable=False)
     youtube_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    video_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Timed transcript of an uploaded video ([{text, start, duration}]) so the
+    # owner can draft more questions later without re-transcribing.
+    transcript: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     luminar_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("luminars.id", ondelete="SET NULL"), nullable=True
     )
 
     # Only published assessments can be opened/answered by anyone but the owner.
     published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Published AND listed → shown in the public Discover directory.
+    listed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped["User"] = relationship()
     questions: Mapped[list["AssessmentQuestion"]] = relationship(
@@ -45,7 +52,7 @@ class Assessment(AuditMixin, Base):
     )
 
     __table_args__ = (
-        CheckConstraint("source_type IN ('youtube','luminar')", name="check_assessment_source_type"),
+        CheckConstraint("source_type IN ('youtube','upload','luminar')", name="check_assessment_source_type"),
     )
 
 

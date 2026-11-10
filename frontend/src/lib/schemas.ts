@@ -100,6 +100,8 @@ export const DiscoverItemSchema = z.object({
   author_id: z.string(),
   author_name: z.string(),
   author_avatar_url: z.string().optional().nullable(),
+  like_count: z.number().default(0),
+  view_count: z.number().default(0),
   created_at: z.string(),
 })
 
@@ -116,7 +118,13 @@ export type ConceptStat = z.infer<typeof ConceptStatSchema>
 // Assessments (teacher-authored question sheets on a video)
 // ---------------------------------------------------------------------------
 
-export const AssessmentSourceTypeSchema = z.enum(["youtube", "luminar"])
+export const AssessmentSourceTypeSchema = z.enum(["youtube", "upload", "luminar"])
+
+export const TranscriptSegmentSchema = z.object({
+  text: z.string(),
+  start: z.number(),
+  duration: z.number().default(0),
+})
 
 /** Editable question (builder). Owner-side, so it carries the answer. */
 export const DraftQuestionSchema = z.object({
@@ -149,13 +157,16 @@ export const AssessmentSchema = z.object({
   source_type: AssessmentSourceTypeSchema,
   youtube_url: z.string().optional().nullable(),
   luminar_id: z.string().optional().nullable(),
+  video_url: z.string().optional().nullable(),
   published: z.boolean(),
+  listed: z.boolean().default(false),
   is_owner: z.boolean(),
   author_name: z.string().optional().nullable(),
   submission_count: z.number().default(0),
   created_at: z.string(),
   updated_at: z.string(),
   questions: z.array(AssessmentQuestionSchema),
+  transcript: z.array(TranscriptSegmentSchema).optional().nullable(),
 })
 
 export const AssessmentSummarySchema = z.object({
@@ -164,9 +175,35 @@ export const AssessmentSummarySchema = z.object({
   objective: z.string().optional().nullable(),
   source_type: AssessmentSourceTypeSchema,
   published: z.boolean(),
+  listed: z.boolean().default(false),
   question_count: z.number(),
   submission_count: z.number(),
   created_at: z.string(),
+})
+
+export const DirectoryItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  objective: z.string().optional().nullable(),
+  source_type: AssessmentSourceTypeSchema,
+  youtube_url: z.string().optional().nullable(),
+  author_name: z.string(),
+  author_avatar_url: z.string().optional().nullable(),
+  question_count: z.number(),
+  learner_count: z.number(),
+  created_at: z.string(),
+})
+
+export const VideoUploadSchema = z.object({
+  video_url: z.string(),
+  transcript: z.array(TranscriptSegmentSchema),
+  duration_s: z.number(),
+})
+
+export const EngagementSchema = z.object({
+  like_count: z.number(),
+  view_count: z.number(),
+  liked_by_me: z.boolean(),
 })
 
 export const AnswerStateSchema = z.object({
@@ -211,6 +248,10 @@ export const AssessmentResponsesSchema = z.object({
 })
 
 export type AssessmentSourceType = z.infer<typeof AssessmentSourceTypeSchema>
+export type TranscriptSegment = z.infer<typeof TranscriptSegmentSchema>
+export type DirectoryItem = z.infer<typeof DirectoryItemSchema>
+export type VideoUpload = z.infer<typeof VideoUploadSchema>
+export type Engagement = z.infer<typeof EngagementSchema>
 export type DraftQuestion = z.infer<typeof DraftQuestionSchema>
 export type AssessmentQuestion = z.infer<typeof AssessmentQuestionSchema>
 export type Assessment = z.infer<typeof AssessmentSchema>
